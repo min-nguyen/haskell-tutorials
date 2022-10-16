@@ -1,8 +1,6 @@
 {- https://okmij.org/ftp/Computation/LogicT.pdf
 -}
 
-{- The MonadPlus interface provides two primitives for expressing backtracking computations
--}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
@@ -15,6 +13,8 @@ import Control.Monad.Trans
 import Control.Monad.Identity (Identity)
 import Data.Functor.Identity
 
+{- The MonadPlus interface provides two primitives for expressing backtracking computations
+-}
 class Monad m => MonadPlus m where
   -- | Failure
   mzero :: m a
@@ -50,9 +50,9 @@ runList = id
 
    The list monad has an interpretive overhead because it constructs and destructs singleton lists over and over again.
    It also takes quadratic time to enumerate all the solutions of a program.
-   Below we aim generalise the runList function to monads L other than the list monad.
+   Below we aim generalise the runList function to monads m other than the list monad.
 
-   runL :: Maybe Int -> L a -> [a]
+   runN :: Maybe Int -> m a -> [a]
 -}
 
 {- 3.2 Fair disjunction
@@ -72,13 +72,13 @@ runList = id
 
   For example, the following computation diverges on `odds` without ever considering `evens`.
 
-  runL (Just 1) (do x <- odds `mplus` evens
+  runN (Just 1) (do x <- odds `mplus` evens
                     if even x then pure x else mzero)
 
   We therefore would like a primitive "interleave" that allows for *fair disjunction*,
   such that answers produced by one computation can be interleaved with answers from another.
 
-  runL (Just 1) (do x <- odds `interleave` evens
+  runN (Just 1) (do x <- odds `interleave` evens
                   if even x then pure x else mzero)
 -}
 
@@ -97,12 +97,12 @@ runList = id
   oddsPlus :: MonadPlus m => Int -> m Int
   oddsPlus n = odds >>= \a -> pure (a + n)
 
-  runL (Just 1) (do x <- (pure 0 `mplus` pure 1) >>= oddsPlus
+  runN (Just 1) (do x <- (pure 0 `mplus` pure 1) >>= oddsPlus
                     if even x then pure x else mzero)
 
   We therefore would like a primitive ">>-" that allows for *fair conjunction*,
 
-  runL (Just 1) (do x <- (pure 0 `mplus` pure 1) >>- oddsPlus
+  runN (Just 1) (do x <- (pure 0 `mplus` pure 1) >>- oddsPlus
                     if even x then pure x else mzero)
 -}
 
@@ -116,7 +116,7 @@ runList = id
 
   For example, the following computation restricts odd numbers `n` to those that are divisible by another number `d`.
 
-  runL (Just 10) (do n <- odds
+  runN (Just 10) (do n <- odds
                      guard (n > 1)                        -- | if this returns `mzero`, then `mzero >>= k` = `mzero` applies.
                      d <- msum (map pure [1 .. n - 1])
                      guard (d > 1 && n `mod` d == 0)
@@ -130,7 +130,7 @@ runList = id
 
   performs `th` if `t` succeeds and `el` otherwise.
 
-  runL (Just 10) (do n <- odds
+  runN (Just 10) (do n <- odds
                      guard (n > 1)
                      ifte (do d <- msum (map pure [1 .. n - 1])
                               guard (d > 1 && n `mod` d == 0))
@@ -145,7 +145,7 @@ runList = id
 
    For example, if a prime number `n` is divisible by any number `d`, there is no need to look for further factorisations:
 
-   runL (Just 10) (do n <- odds
+   runN (Just 10) (do n <- odds
                      guard (n > 1)
                      ifte (once (do d <- msum (map pure [1 .. n - 1])
                                     guard (d > 1 && n `mod` d == 0)))
@@ -231,8 +231,10 @@ instance LogicM [] where
   monad `m`, such that `lift m >> mzero` can perform effects before failing.
 -}
 
-class LogicT t where
+class MonadTrans t => LogicT t where
   msplitT :: Monad m => t m a -> t m (Maybe (a, t m a))
+  {- The rest of the functions: `interleaveT`, `>>-T`, `ifteT`, and `onceT`, can
+     also be relocated here from LogicM. -}
 
 {- 5.1 CPS version
 
